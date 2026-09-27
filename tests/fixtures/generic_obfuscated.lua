@@ -9,7 +9,7 @@ do
 	for i = 1, 6 do
 		t[i] = c(108 + i)
 	end
-	local name = s.reverse(s.concat(t))
+	local name = s.reverse(table.concat(t))
 	local fn = loadstring or load
 	local chunk = fn("return " .. #name .. " * 7")
 	local n = chunk()
