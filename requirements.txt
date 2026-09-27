@@ -1,0 +1,12 @@
+# Web service
+fastapi>=0.110
+uvicorn[standard]>=0.27
+python-multipart>=0.0.9
+
+# engine/luauvmp (MIT) needs zstandard to inflate Luraph v14.x streams
+zstandard>=0.22,<1
+
+# The patched Luau binaries are built from source, not installed from PyPI:
+#     python tools/build_luau.py
+# cmake and ninja are build-time helpers for that; install them with your system
+# package manager, or `pip install cmake ninja` if that is easier.

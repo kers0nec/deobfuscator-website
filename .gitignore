@@ -1,0 +1,18 @@
+# built native runtimes (tools/build_luau.py, tools/install_lune.sh)
+/bin/
+/engine/cadmio/deobf/bin/luau
+/engine/cadmio/deobf/bin/luau-ast
+/engine/cadmio/deobf/bin/luau.exe
+/engine/cadmio/deobf/bin/luau-ast.exe
+/engine/cadmio/deobf/bin/lune
+
+# job data: untrusted uploads and their outputs
+/var/
+
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+.DS_Store
