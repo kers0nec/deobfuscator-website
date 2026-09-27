@@ -1,0 +1,28 @@
+services:
+  deobfuscator:
+    build: .
+    image: kers0ne-deobfuscator
+    ports:
+      - "${PORT:-8000}:8000"
+    environment:
+      KERS_SITE_NAME: "${KERS_SITE_NAME:-kers0ne website}"
+      KERS_SITE_URL: "${KERS_SITE_URL:-}"
+      KERS_WORKERS: "${KERS_WORKERS:-2}"
+      KERS_MAX_QUEUE: "${KERS_MAX_QUEUE:-64}"
+      KERS_MAX_INPUT_BYTES: "${KERS_MAX_INPUT_BYTES:-33554432}"
+      KERS_RETENTION_SECONDS: "${KERS_RETENTION_SECONDS:-21600}"
+    volumes:
+      # keep uploads/results across container restarts
+      - jobs:/app/var/jobs
+    restart: unless-stopped
+    # the sandbox runs untrusted Luau: no extra capabilities, no privilege
+    # escalation, and a hard memory/CPU ceiling.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop: [ALL]
+    read_only: false
+    mem_limit: 4g
+    cpus: 4.0
+
+volumes:
+  jobs:

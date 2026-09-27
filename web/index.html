@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Luau Deobfuscator</title>
+<meta name="description" content="Deobfuscate protected Roblox Luau scripts. Devirtualize Luraph and IronBrew VM bytecode, sandbox-trace everything else.">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="wrap">
+    <a class="brand" href="/">
+      <span class="mark" aria-hidden="true"></span>
+      <span class="brandtext"><strong id="site-name">kers0ne</strong><em>deobfuscator</em></span>
+    </a>
+    <nav class="navlinks">
+      <a href="#submit">Deobfuscate</a>
+      <a href="#support">Support matrix</a>
+      <a href="#runtime">Runtime</a>
+      <a href="/api/docs" target="_blank" rel="noopener">API</a>
+    </nav>
+    <div id="runtime-pill" class="pill pill-unknown" title="checking runtime…">checking…</div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <!-- ---------------------------------------------------------- submit -->
+  <section id="submit" class="card">
+    <h1>Deobfuscate a protected Luau script</h1>
+    <p class="lede">
+      Drop in a script, or paste it. The site identifies the obfuscator, lifts VM bytecode
+      back to source where it can, and sandbox-traces the rest. Nothing is uploaded anywhere
+      else and jobs are deleted after a few hours.
+    </p>
+
+    <div id="dropzone" class="dropzone" tabindex="0" role="button"
+         aria-label="Choose a file or drop one here">
+      <input type="file" id="file" accept=".lua,.luau,.txt" hidden>
+      <div class="dz-inner">
+        <div class="dz-icon" aria-hidden="true">↓</div>
+        <div class="dz-text"><strong>Drop a .lua / .luau file</strong>
+          <span>or click to choose — or paste below</span></div>
+        <div class="dz-meta" id="dz-meta"></div>
+      </div>
+    </div>
+
+    <div class="paste-row">
+      <label class="sr-only" for="source">Paste source</label>
+      <textarea id="source" spellcheck="false" rows="6"
+                placeholder="-- paste an obfuscated script here"></textarea>
+    </div>
+
+    <div class="controls">
+      <label class="check"><input type="checkbox" id="opt-devirt" checked>
+        <span>Devirtualize <em>(lift VM bytecode to source; slower)</em></span></label>
+      <label class="field"><span>Harness timeout (s)</span>
+        <input type="number" id="opt-timeout" value="240" min="15" max="3600" step="15"></label>
+      <label class="field"><span>Script budget (s)</span>
+        <input type="number" id="opt-budget" value="30" min="5" max="600" step="5"></label>
+      <div class="spacer"></div>
+      <button id="go" class="btn btn-primary" type="button">Deobfuscate</button>
+    </div>
+
+    <p class="notice" id="form-error" hidden></p>
+
+    <details class="legal">
+      <summary>Only analyse scripts you own or have permission to inspect</summary>
+      <p>
+        This tool exists for security research and recovery: finding the backdoor in a free
+        model, understanding a script running in your own game, getting your own lost source
+        back. Deobfuscating someone else's protected script to steal or redistribute it is not
+        that, and it is not what this is for. Uploaded scripts are executed in a sandbox with a
+        fake Roblox environment — no network, no filesystem, no executor APIs — but treat every
+        sample as hostile anyway.
+      </p>
+    </details>
+  </section>
+
+  <!-- ------------------------------------------------------------ job -->
+  <section id="job" class="card" hidden>
+    <div class="job-head">
+      <div>
+        <h2 id="job-title">Working…</h2>
+        <p class="sub" id="job-sub"></p>
+      </div>
+      <div class="job-actions">
+        <button id="cancel" class="btn btn-ghost" type="button" hidden>Cancel</button>
+        <button id="copy" class="btn btn-ghost" type="button" hidden>Copy</button>
+        <a id="download" class="btn btn-primary" hidden download>Download</a>
+        <button id="again" class="btn btn-ghost" type="button" hidden>New script</button>
+      </div>
+    </div>
+
+    <div id="detection" class="detection" hidden></div>
+
+    <div class="job-grid">
+      <div class="pane">
+        <div class="pane-head"><h3>Result</h3>
+          <span class="tag" id="result-tag" hidden></span></div>
+        <pre id="output" class="output" tabindex="0"><span class="muted">waiting…</span></pre>
+        <div class="pane-foot" id="output-meta"></div>
+      </div>
+
+      <div class="pane">
+        <div class="pane-head"><h3>Pipeline log</h3>
+          <label class="check small"><input type="checkbox" id="autoscroll" checked><span>follow</span></label>
+        </div>
+        <pre id="log" class="log" tabindex="0"></pre>
+        <div class="pane-foot" id="artifacts"></div>
+      </div>
+    </div>
+
+    <details class="report" id="report-box" hidden>
+      <summary>Full report (JSON)</summary>
+      <pre id="report"></pre>
+    </details>
+  </section>
+
+  <!-- -------------------------------------------------------- support -->
+  <section id="support" class="card">
+    <h2>What this actually recovers</h2>
+    <p class="lede">
+      No deobfuscator handles everything, and a site that claims otherwise is selling
+      something. Here is the honest matrix: what each family gets, and what that means.
+    </p>
+    <div class="tablewrap">
+      <table id="matrix">
+        <thead><tr><th>Obfuscator</th><th>Recovery</th><th>What you get</th><th>Notes</th></tr></thead>
+        <tbody><tr><td colspan="4" class="muted">loading…</td></tr></tbody>
+      </table>
+    </div>
+    <div class="levels" id="levels"></div>
+  </section>
+
+  <!-- -------------------------------------------------------- runtime -->
+  <section id="runtime" class="card">
+    <h2>Runtime status</h2>
+    <p class="lede">Two native binaries decide how much this install can do. This panel
+      reflects the server you are talking to right now.</p>
+    <div id="tools" class="tools"><p class="muted">loading…</p></div>
+    <details class="howto">
+      <summary>Setting these up on your own server</summary>
+      <pre><code># patched Luau (luau + luau-ast) — needs git, cmake, a C++ compiler
+python tools/build_luau.py
+
+# Lune — only for full Luraph v14.x devirtualization
+bash tools/install_lune.sh
+
+# then run the site
+pip install -r requirements.txt
+python run.py            # http://0.0.0.0:8000</code></pre>
+      <p>Or <code>docker compose up --build</code>, which does all of it in the image.</p>
+    </details>
+  </section>
+
+  <footer class="foot">
+    <span id="foot-name">kers0ne website</span>
+    <span class="dot">·</span>
+    <a href="#support">support matrix</a>
+    <span class="dot">·</span>
+    <a href="/api/docs">API</a>
+    <span class="dot">·</span>
+    <a href="/CREDITS.md">credits</a>
+  </footer>
+</main>
+
+<script src="/app.js"></script>
+</body>
+</html>

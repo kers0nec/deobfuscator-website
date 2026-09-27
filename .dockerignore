@@ -1,0 +1,45 @@
+# Build context for the Docker image (Render uses BuildKit and honours this
+# file). Keeping it small matters: the context is uploaded on every deploy, and
+# a stale artifact baked into an image is much harder to notice than a missing
+# one.
+
+# --- version control and tooling -------------------------------------------
+.git
+.gitignore
+.gitattributes
+.github
+
+# --- Python caches ----------------------------------------------------------
+__pycache__
+**/__pycache__
+*.py[cod]
+*.egg-info
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.venv
+venv
+
+# --- runtime state: uploaded samples and their artifacts --------------------
+# This directory holds other people's obfuscated scripts from local testing.
+# It must never end up inside a published image.
+var
+bin
+
+# --- native binaries --------------------------------------------------------
+# The image compiles its own portable luau/luau-ast in the `luau` build stage.
+# Excluding the local copies guarantees the image cannot ship a binary that was
+# built with -march=native on somebody's laptop and faults on the host CPU.
+engine/cadmio/deobf/bin
+
+# --- not needed at runtime --------------------------------------------------
+tests
+docs
+*.md
+!README.md
+!LICENSE
+!CREDITS.md
+Dockerfile
+docker-compose.yml
+render.yaml
+.dockerignore

@@ -1,0 +1,142 @@
+# Render Blueprint — kers0ne deobfuscator
+#
+# Deploy: Render dashboard -> New + -> Blueprint -> pick this repo. Render reads
+# this file, creates the service, builds the Docker image (which compiles the
+# patched Luau and fetches Lune), and assigns a public HTTPS domain
+# automatically:  https://kers0ne-deobfuscator.onrender.com
+#
+# ── PLAN ────────────────────────────────────────────────────────────────────
+# Render names plans by size, and rejects the dashboard's marketing names:
+# `starter` is NOT valid here and the blueprint sync will fail on it.
+#
+#   free          0.1 CPU /  512 MB   $0/mo   <- set below
+#   0.5c-512mb    0.5 CPU /  512 MB   $7/mo
+#   1c-2g         1   CPU /    2 GB  $25/mo   <- what this workload wants
+#   2c-4g         2   CPU /    4 GB  $85/mo
+#
+# `plan` is set explicitly on purpose: omitting it defaults to 0.5c-512mb, which
+# is a paid tier, so an empty field would start billing without anyone choosing
+# to. `free` is chosen so the first deploy costs nothing and needs no card.
+#
+# The free tier is usable but slow: 0.1 CPU means a Luraph v15 devirtualization
+# that takes ~20s on a laptop can take minutes here. The timeouts below are
+# widened to compensate. It also spins down after 15 min idle (first request
+# then waits for a cold start) and is capped at 750 instance-hours per
+# workspace per month. For real use, change one line:  plan: 1c-2g
+# and raise KERS_WORKERS / KERS_MAX_INPUT_BYTES to match.
+#
+# ── SINGLE INSTANCE IS A REQUIREMENT, NOT A DEFAULT ─────────────────────────
+# Job state lives in this process's memory and on the container's local disk.
+# With more than one instance, a job created on instance A cannot be fetched
+# from instance B, and the SSE log stream will connect to whichever instance
+# happens to answer. So numInstances is pinned to 1 and autoscaling is left off.
+# Scaling out needs a shared job store first (see README "Scaling").
+
+services:
+  - type: web
+    name: kers0ne-deobfuscator
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    region: ohio                  # closest Render region to the US east coast
+    numInstances: 1               # see the note above — do not raise this
+    healthCheckPath: /api/health  # always 200 once the API is up, even if a
+                                  # native runtime is missing, so a deploy is
+                                  # never marked failed for something the UI
+                                  # reports honestly at runtime
+
+    # Render terminates TLS and proxies to the container over plain HTTP, so the
+    # app trusts X-Forwarded-For/Proto (KERS_PROXY_HEADERS, on by default).
+    # PORT is injected by Render at runtime; nothing here sets it.
+
+    # A job can be mid-analysis when a deploy lands. 60s is enough for the
+    # server to stop accepting work and shut the API down cleanly; it is not
+    # enough for a long devirtualization to finish, and an in-flight job will be
+    # lost. That is the right trade - holding a deploy open for 5 minutes to
+    # save one job is worse. Render's maximum is 300.
+    maxShutdownDelaySeconds: 60
+
+    envVars:
+      # ---- identity -------------------------------------------------------
+      # Stamped into every result file and shown in the UI header.
+      - key: KERS_SITE_NAME
+        value: kers0ne website
+      # Uncomment to add a second header line (the public URL, once known):
+      # - key: KERS_SITE_URL
+      #   value: https://kers0ne-deobfuscator.onrender.com
+
+      # ---- sized for 0.1 CPU / 512 MB -------------------------------------
+      # One worker: two concurrent analyses would thrash 0.1 CPU and could push
+      # the container past 512 MB, where the OOM killer takes the whole service
+      # down rather than just the job.
+      - key: KERS_WORKERS
+        value: "1"
+      - key: KERS_MAX_QUEUE
+        value: "16"
+      # 8 MiB, not the 32 MiB default: a large sample plus its artifacts does
+      # not fit comfortably in 512 MB alongside the Luau VM. Raise on 1c-2g.
+      - key: KERS_MAX_INPUT_BYTES
+        value: "8388608"
+
+      # ---- widened timeouts for a slow CPU --------------------------------
+      # These are wall-clock limits on the analysis, not on the HTTP request.
+      # At 0.1 CPU the same VM walk takes several times longer than on a
+      # laptop, so the defaults would abort work that was about to succeed.
+      - key: KERS_DEFAULT_TIMEOUT
+        value: "900"
+      - key: KERS_DEFAULT_BUDGET
+        value: "120"
+      - key: KERS_DEFAULT_DEVIRT_TIMEOUT
+        value: "1800"
+
+      # ---- ephemeral disk -------------------------------------------------
+      # The container's filesystem is wiped on every deploy and restart, so
+      # finished jobs are dropped after an hour instead of six. MIN_FREE_MB
+      # keeps headroom: when the volume runs low the service prunes oldest-first
+      # and then returns 507 rather than letting a full disk break the box.
+      - key: KERS_RETENTION_SECONDS
+        value: "3600"
+      - key: KERS_KEEP_FINISHED
+        value: "20"
+      - key: KERS_MIN_FREE_MB
+        value: "256"
+      - key: KERS_JOB_DIR
+        value: /app/var/jobs
+
+      - key: PYTHONUNBUFFERED
+        value: "1"
+
+    # ---- custom domain (optional) ----------------------------------------
+    # The onrender.com subdomain above is created automatically and needs no
+    # DNS work. To serve this from your own domain, uncomment and add a CNAME
+    # record pointing at the onrender.com hostname:
+    #
+    #     deobf.example.com  CNAME  kers0ne-deobfuscator.onrender.com
+    #
+    # Render then provisions the certificate itself. `renderSubdomainPolicy`
+    # stays `enabled` so both hostnames work; set it to `disabled` to force
+    # traffic onto the custom domain only.
+    #
+    # domains:
+    #   - deobf.example.com
+    renderSubdomainPolicy: enabled
+
+    # Docs-only edits should not trigger a 10-minute image rebuild.
+    buildFilter:
+      paths:
+        - server/**/*
+        - web/**/*
+        - engine/**/*
+        - tools/**/*
+        - run.py
+        - requirements.txt
+        - Dockerfile
+        - .dockerignore
+        - render.yaml
+      ignoredPaths:
+        - "**/*.md"
+        - tests/**/*
+
+# No databases, no Redis, no background workers: job state is deliberately
+# local so the whole service is one container with nothing to provision.
